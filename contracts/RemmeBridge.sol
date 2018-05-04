@@ -9,6 +9,7 @@ contract RemmeBridge {
         uint256 swapId;
         address senderAddress;
         address receiverAddress;
+        address keyHolderAddress;
         bytes remchainAddress; //provided remchain address of
         uint amount; //amount for swap, which will be locked
         bytes emailAddressEncryptedOptional; //optional argument with encrypted email for swap continiue notification
@@ -43,15 +44,21 @@ contract RemmeBridge {
     event OpenSwap(uint256 id);
     event ExpireSwap(uint256 id);
     event ApproveSwap(uint256 id);
+    event SetSecretLock(uint256 id);
 
     //MODIFIERS
     modifier onlyOverdueSwap(uint256 _swapId) {
-        require (now >= swaps[_swapId].timelock);
+        require(now >= swaps[_swapId].timelock);
         _;
     }
 
     modifier onlyNotOverdueSwap(uint256 _swapId) {
-        require (now < swaps[_swapId].timelock);
+        require(now < swaps[_swapId].timelock);
+        _;
+    }
+
+    modifier onlyOpenedState(uint256 _swapId) {
+        require(swapStates[_swapId] == State.OPENED);
         _;
     }
 
@@ -62,17 +69,16 @@ contract RemmeBridge {
     }
 
     /*
-    * @title OpenSwap
 	* @notice User should use this function for request swap locking his tokens
 	* @dev There two cases of using this function:
-	* 1) Alice requests swap and don't put _secretLock argument, and should send ether
+	* 1) Alice requests swap and don't put _secretLock argument, and sends ether
 	*    required by atomicSwapProvider for gas coverage
 	* 2) Bob opens swap after Alice's request in Remmechain
-	* @param will be set only by Bob
+	* @param _secretLock will be set only by Bob. Should be checked in client side during validation
     */
     function openSwap (
         address _receiverAddress,
-        bytes _secretLock,
+        bytes32 _secretLock,
         uint256 _amount,
         bytes32 _remchainAddress,
         bytes _emailAddressEncryptedOptional)
@@ -80,22 +86,29 @@ contract RemmeBridge {
     payable
     {
         //set timelock 24h in case user request eth-rem swap (Alice) otherwise (Bob) set 48h
-        uint256 _timelock = (_secretLock == bytes(0)) ? now + LOCK24 : now + LOCK48;
+        //Bob set as keyHolder
+        if (_secretLock == bytes32(0)) {
+            uint256 lock = now + LOCK24;
+            address keyHolder = _receiverAddress;
+        } else {
+            uint256 lock = now + LOCK48;
+            address keyHolder = msg.sender;
+        }
 
         //create and save new swap
 	    AtomicSwap memory swap = Swap({
             swapId: swaps.length,
             senderAddress: msg.sender,
             receiverAddress: _receiverAddress,
+            keyHolderAddress: keyHolder,
             remchainAddress:_remchainAddress,
             amount: _amount,
             emailAddressEncryptedOptional: _emailAddressEncryptedOptional,
             secretLock: _secretLock,
             secretKey: new bytes(0), //will be set only on closing swap
-            timelock: _timelock
+            timelock: lock
             });
         swaps[swap.swapId] = swap;
-        swapStates[swap.swapId] = State.OPENED;
 
         //deposit tokens
 		require(REMToken.transferFrom(msg.sender, address(this), _amount));
@@ -125,23 +138,46 @@ contract RemmeBridge {
         deposits[msg.sender] = deposits[msg.sender].sub(lockedTokens);
         REMToken.transfer(msg.sender, amount);
 
-        //set state
         swapStates[_swapId] = State.EXPIRED;
         emit ExpireSwap(_swapId);
     }
 
-    function approveSwap(uint256 swapId) onlyNotOverdueSwap(_swapId) external payable {
+    /* @notice should be called only by Bob after opening swap by Alice, otherwise
+    *  secretLock was set in openSwap()
+    *  @param _secretLock secretKey hashed by Bob
+    */
+    function setSecretLock(uint256 _swapId, bytes32 _secretLock)
+    onlyNotOverdueSwap(_swapId)
+    onlyOpenedState(_swapId)
+    external {
 
-        //check that swap still opened
-        require(swapStates[_swapId] == State.OPENED);
-        //check that msg.sender is receiver of locked funds
-        require(msg.sender == swaps[swapId].receiverAddress);
+        //check that secretLock will set by keyHolder
+        require(msg.sender == swaps[_swapId].keyHolderAddress);
+        //check that secretLock exists
+        require(_secretLock != bytes32(0));
 
-        //set swapState
+        //set secretLock
+        swaps[_swapId].secretLock = _secretLock;
+
+        emit SetSecretLock(_swapId);
+    }
+
+    /* @notice should be called only by Alice after setting key
+    */
+    function approveSwap(uint256 _swapId) onlyNotOverdueSwap(_swapId) onlyOpenedState(_swapId) external payable {
+
+        //check that secret lock is set
+        require(swaps[_swapId].secretLock != bytes32(0));
+        //check that swap approved not by keyHolder
+        require(msg.sender != swaps[_swapId].keyHolderAddress);
+
         swapStates[_swapId] = State.APPROVED;
         emit ApproveSwap(_swapId);
     }
 
-    
+//    function closeSwap(uint256 _swapId, bytes _secretKey) onlyNotOverdueSwap(_swapId) external {
+//
+//    }
+
 
 }
