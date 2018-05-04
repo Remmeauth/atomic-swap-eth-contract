@@ -12,8 +12,8 @@ contract RemmeBridge {
         uint256 swapId;
         address senderAddress;
         address receiverAddress;
-        address keyHolderAddress;
-        bytes remchainAddress; //provided remchain address of
+        address keyHolderAddress; //Bob's address
+        bytes remchainAddress; //provided remchain address
         uint amount; //amount for swap, which will be locked
         bytes emailAddressEncryptedOptional; //optional argument with encrypted email for swap continiue notification
         bytes32 secretLock; //hash of key, that used for locking funds
@@ -38,6 +38,7 @@ contract RemmeBridge {
 
     //VARIABLES
     // fixme do we need to delete closed and expired swaps for cleaning up storage?
+	// fixme do we need match swaps in remme and ethereum? (suggestion to use simple id in ascending order)
 	AtomicSwap[] public swaps; //array of all swaps
     mapping (uint256 => State) public swapStates; // mapping with states of each swap
 	mapping (address => uint256) public deposits; // user deposits
@@ -46,8 +47,9 @@ contract RemmeBridge {
     //EVENTS
     event OpenSwap(uint256 id);
     event ExpireSwap(uint256 id);
+	event SetSecretLock(uint256 id);
     event ApproveSwap(uint256 id);
-    event SetSecretLock(uint256 id);
+	event CloseSwap(uint256 id);
 
     //MODIFIERS
     modifier onlyOverdueSwap(uint256 _swapId) {
@@ -65,13 +67,6 @@ contract RemmeBridge {
         _;
     }
 
-	modifier onlyApprovedState(uint256 _swapId) {
-		require(swapStates[_swapId] == State.APPROVED);
-		_;
-	}
-
-
-
     //FUNCTIONS
     function RemmeBridge() {
         //constructor
@@ -79,11 +74,11 @@ contract RemmeBridge {
 
     /*
 	* @notice User should use this function for request swap locking his tokens
-	* @dev There two cases of using this function:
+	* @dev There are two cases of using this function:
 	* 1) Alice requests swap and don't put _secretLock argument, and sends ether
 	*    required by atomicSwapProvider for gas coverage
-	* 2) Bob opens swap after Alice's request in Remmechain
-	* @param _secretLock will be set only by Bob. Should be checked in client side during validation
+	* 2) Bob opens swap after Alice's request in Remmechain and set _secretLock
+	* @param _secretLock (!) will be set only by Bob. Should be checked in client side during validation
     */
     function openSwap (
         //todo create separate function for initSwap() where receiverAddress will be set as msg.sender an so on
@@ -142,11 +137,10 @@ contract RemmeBridge {
         require(deposits[msg.sender] >= swaps[_swapId].amount);
 
         AtomicSwap currentSwap = swaps[_swapId];
-        uint256 memory lockedTokens = currentSwap.amount;
 
         //withdraw funds
-        deposits[msg.sender] = deposits[msg.sender].sub(lockedTokens);
-        REMToken.transfer(msg.sender, amount);
+        deposits[msg.sender] = deposits[msg.sender].sub(currentSwap.amount);
+        REMToken.transfer(msg.sender, currentSwap.amount);
 
         swapStates[_swapId] = State.EXPIRED;
         emit ExpireSwap(_swapId);
@@ -190,13 +184,27 @@ contract RemmeBridge {
 	onlyApprovedState(_swapId)
 	external {
 
-		//check that swap is closing by keyHolder
+		//check that swap is closing by receiverAddress
+        require(msg.sender == swaps[_swapId].receiverAddress);
+
+	    //require approve only if swap opened be Alice
+	    if (swaps[_swapId].senderAddress != swaps[_swapId].keyHolderAddress) {
+		    require(swapStates[_swapId] == State.APPROVED);
+	    }
 	    //check provided secret key
-	    // withdraw funds
-	    //set state
-	    //emit event
+        require(keccak256(_secretKey) == swaps[_swapId].secretLock);
 
+	    AtomicSwap currentSwap = swaps[_swapId];
+
+	    // withdraw funds or store if receiver is atomicSwapProvider
+	    deposits[currentSwap.senderAddress] = deposits[currentSwap.senderAddress].sub(currentSwap.amount);
+	    if (currentSwap.receiverAddress == atomicSwapProvider) {
+		    tokenStorage.add(currentSwap.amount);
+	    } else {
+		    currentSwap.receiverAddress.transfer(currentSwap.amount);
+	    }
+
+	    swapStates[_swapId] == State.CLOSED;
+	    emit CloseSwap(_swapId);
     }
-
-
 }
