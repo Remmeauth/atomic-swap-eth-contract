@@ -3,6 +3,9 @@ pragma solidity ^0.4.21;
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 import '../contracts/ERC20Interface.sol';
 
+/* @title RemmeBridge
+*  <description>
+*/
 contract RemmeBridge {
 
     struct AtomicSwap {
@@ -62,6 +65,12 @@ contract RemmeBridge {
         _;
     }
 
+	modifier onlyApprovedState(uint256 _swapId) {
+		require(swapStates[_swapId] == State.APPROVED);
+		_;
+	}
+
+
 
     //FUNCTIONS
     function RemmeBridge() {
@@ -77,6 +86,7 @@ contract RemmeBridge {
 	* @param _secretLock will be set only by Bob. Should be checked in client side during validation
     */
     function openSwap (
+        //todo create separate function for initSwap() where receiverAddress will be set as msg.sender an so on
         address _receiverAddress,
         bytes32 _secretLock,
         uint256 _amount,
@@ -168,16 +178,25 @@ contract RemmeBridge {
 
         //check that secret lock is set
         require(swaps[_swapId].secretLock != bytes32(0));
-        //check that swap approved not by keyHolder
+        //check that swap is approving not by keyHolder
         require(msg.sender != swaps[_swapId].keyHolderAddress);
 
         swapStates[_swapId] = State.APPROVED;
         emit ApproveSwap(_swapId);
     }
 
-//    function closeSwap(uint256 _swapId, bytes _secretKey) onlyNotOverdueSwap(_swapId) external {
-//
-//    }
+    function closeSwap(uint256 _swapId, bytes _secretKey)
+    onlyNotOverdueSwap(_swapId)
+	onlyApprovedState(_swapId)
+	external {
+
+		//check that swap is closing by keyHolder
+	    //check provided secret key
+	    // withdraw funds
+	    //set state
+	    //emit event
+
+    }
 
 
 }
