@@ -17,8 +17,9 @@ contract RemmeBridge {
         uint256 timelock; //time from which is allowed swap expiration
     }
 
-    enum States {
+    enum State {
         OPENED,
+        APPROVED,
         CLOSED,
         EXPIRED
     }
@@ -34,21 +35,22 @@ contract RemmeBridge {
     //VARIABLES
     // fixme do we need to delete closed and expired swaps for cleaning up storage?
 	AtomicSwap[] public swaps; //array of all swaps
-    mapping (uint256 => States) public swapStates; // mapping with states of each swap
+    mapping (uint256 => State) public swapStates; // mapping with states of each swap
 	mapping (address => uint256) public deposits; // user deposits
-	uint256 public tokenStorage; //contract token storage
+	uint public tokenStorage; //contract token storage
 
     //EVENTS
     event OpenSwap(uint256 id);
     event ExpireSwap(uint256 id);
+    event ApproveSwap(uint256 id);
 
     //MODIFIERS
-    modifier onlyExpiredSwap(uint256 _swapId) {
+    modifier onlyOverdueSwap(uint256 _swapId) {
         require (now >= swaps[_swapId].timelock);
         _;
     }
 
-    modifier onlyNotExpiredSwap(uint256 _swapId) {
+    modifier onlyNotOverdueSwap(uint256 _swapId) {
         require (now < swaps[_swapId].timelock);
         _;
     }
@@ -74,6 +76,7 @@ contract RemmeBridge {
         uint256 _amount,
         bytes32 _remchainAddress,
         bytes _emailAddressEncryptedOptional)
+    external
     payable
     {
         //set timelock 24h in case user request eth-rem swap (Alice) otherwise (Bob) set 48h
@@ -92,7 +95,7 @@ contract RemmeBridge {
             timelock: _timelock
             });
         swaps[swap.swapId] = swap;
-        swapStates[swap.swapId] = States.OPENED;
+        swapStates[swap.swapId] = State.OPENED;
 
         //deposit tokens
 		require(REMToken.transferFrom(msg.sender, address(this), _amount));
@@ -102,15 +105,16 @@ contract RemmeBridge {
 		if (msg.value != 0) atomicSwapProvider.transfer(msg.value);
 
         //set state
-        swapStates[swap.swapId] = States.OPENED;
+        swapStates[swap.swapId] = State.OPENED;
         emit OpenSwap(swap.swapId);
     }
 
-    function expire(uint256 _swapId) onlyExpiredSwap(_swapId) {
+    function expireSwap(uint256 _swapId) onlyOverdueSwap(_swapId) external {
+
         //check that swap opened by msg.sender
         require(msg.sender == swaps[swapId].senderAddress);
-        //check that swap still opened
-        require(swapStates[_swapId] = States.OPENED);
+        //check that swap still opened or approved
+        require(swapStates[_swapId] == State.OPENED || State.APPROVED);
         //check that msg.sender has enough funds in deposits
         require(deposits[msg.sender] >= swaps[_swapId].amount);
 
@@ -122,8 +126,22 @@ contract RemmeBridge {
         REMToken.transfer(msg.sender, amount);
 
         //set state
-        swapStates[_swapId] = States.EXPIRED;
+        swapStates[_swapId] = State.EXPIRED;
         emit ExpireSwap(_swapId);
     }
+
+    function approveSwap(uint256 swapId) onlyNotOverdueSwap(_swapId) external payable {
+
+        //check that swap still opened
+        require(swapStates[_swapId] == State.OPENED);
+        //check that msg.sender is receiver of locked funds
+        require(msg.sender == swaps[swapId].receiverAddress);
+
+        //set swapState
+        swapStates[_swapId] = State.APPROVED;
+        emit ApproveSwap(_swapId);
+    }
+
+    
 
 }
