@@ -33,8 +33,8 @@ contract RemmeBridge {
     //CONSTANTS
     uint256 constant LOCK24 = 86400; //seconds in 24h
     uint256 constant LOCK48 = 172800; //seconds in 48h
-	ERC20Interface constant REMToken = 0x83984d6142934bb535793A82ADB0a46EF0F66B6d;
-	address constant atomicSwapProvider = address(0); //todo provide Bot's address
+	ERC20Interface constant REMToken; //= 0x83984d6142934bb535793A82ADB0a46EF0F66B6d;
+	address constant atomicSwapProvider;
 
     //VARIABLES
     // fixme do we need to delete closed and expired swaps for cleaning up storage?
@@ -67,9 +67,37 @@ contract RemmeBridge {
         _;
     }
 
+    //CONSTRUCTOR
+    function RemmeBridge(ERC20Interface _token, address _atomicSwapProvider) {
+        REMToken = _token;
+        atomicSwapProvider = _atomicSwapProvider;
+    }
+
     //FUNCTIONS
-    function RemmeBridge() {
-        //constructor
+    /// @notice Get swap full info
+    function getSwapInfo(uint256 _swapId)returns (
+        address sender,
+        address receiver,
+        address keyHolder,
+        bytes remChainAddress,
+        uint amount,
+        bytes emailEncrypted,
+        bytes32 secretLock,
+        bytes secretKey,
+        uint timelock,
+        State state) 
+    {
+        AtomicSwap swap = swaps[_swapId];
+        sender = swap.senderAddress;
+        receiver = swap.receiverAddress;
+        keyHolder = swap.keyHolderAddress;
+        remChainAddress = swap.remchainAddress;
+        amount = swap.amount;
+        emailEncrypted = swap.emailEncryptedOptional;
+        secretLock = swap.secretLock;
+        secretKey = swap.secretKey;
+        timelock = swap.timelock;
+        state = swapStates[_swapId];
     }
 
     /*

@@ -1,4 +1,19 @@
+const RemmeToken = artifacts.require('RemmeTokenMock')
+const RemmeBridge = artifacts.require('RemmeBridge')
 
+contract ('RemmeBridge', accounts => {
+
+    let remmeBridge;
+    let remmeToken;
+    let alice = accounts[0]
+    let bob = accounts[1]
+
+    before('setup', async () => {
+        remmeToken = await RemmeToken.deployed()
+        remmeBridge = await RemmeBridge.deploy(remmeToken)
+
+    })
+})
 //expired state
 //should not allow to setSecretLock if expired state
 //should not allow to approve if expired state
