@@ -1,4 +1,4 @@
-pragma solidity ^0.4.0;
+pragma solidity ^0.4.21;
 
 contract ERC20Interface {
 	event Transfer(address indexed from, address indexed to, uint256 value);

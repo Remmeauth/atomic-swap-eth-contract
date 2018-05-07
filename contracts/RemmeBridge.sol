@@ -81,7 +81,6 @@ contract RemmeBridge {
 	* @param _secretLock (!) will be set only by Bob. Should be checked in client side during validation
     */
     function openSwap (
-        //todo create separate function for initSwap() where receiverAddress will be set as msg.sender an so on
         address _receiverAddress,
         bytes32 _secretLock,
         uint256 _amount,
@@ -90,8 +89,8 @@ contract RemmeBridge {
     external
     payable
     {
-        //set timelock 24h in case user request eth-rem swap (Alice) otherwise (Bob) set 48h
-        //Bob set as keyHolder
+        //set timelock 24h in case user request eth-rem swap (Alice - without key) otherwise (Bob) set 48h
+        //Bob always set as keyHolder
         if (_secretLock == bytes32(0)) {
             uint256 lock = now + LOCK24;
             address keyHolder = _receiverAddress;
@@ -133,8 +132,6 @@ contract RemmeBridge {
         require(msg.sender == swaps[swapId].senderAddress);
         //check that swap still opened or approved
         require(swapStates[_swapId] == State.OPENED || State.APPROVED);
-        //check that msg.sender has enough funds in deposits
-        require(deposits[msg.sender] >= swaps[_swapId].amount);
 
         AtomicSwap currentSwap = swaps[_swapId];
 
@@ -179,18 +176,17 @@ contract RemmeBridge {
         emit ApproveSwap(_swapId);
     }
 
-    function closeSwap(uint256 _swapId, bytes _secretKey)
-    onlyNotOverdueSwap(_swapId)
-	onlyApprovedState(_swapId)
-	external {
+    function closeSwap(uint256 _swapId, bytes _secretKey) onlyNotOverdueSwap(_swapId) external {
 
 		//check that swap is closing by receiverAddress
         require(msg.sender == swaps[_swapId].receiverAddress);
 
-	    //require approve only if swap opened be Alice
+	    //require approval only if swap opened by Alice
 	    if (swaps[_swapId].senderAddress != swaps[_swapId].keyHolderAddress) {
 		    require(swapStates[_swapId] == State.APPROVED);
-	    }
+	    } else {
+            require(swapStates[_swapId] == State.OPENED);
+        }
 	    //check provided secret key
         require(keccak256(_secretKey) == swaps[_swapId].secretLock);
 
