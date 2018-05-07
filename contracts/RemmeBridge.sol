@@ -75,29 +75,34 @@ contract RemmeBridge {
 
     //FUNCTIONS
     /// @notice Get swap full info
-    function getSwapInfo(uint256 _swapId)returns (
+    function getSwapInfo(uint256 _swapId) returns (
         address sender,
         address receiver,
         address keyHolder,
         bytes remChainAddress,
-        uint amount,
-        bytes emailEncrypted,
-        bytes32 secretLock,
-        bytes secretKey,
-        uint timelock,
-        State state) 
+        State state)
     {
         AtomicSwap swap = swaps[_swapId];
         sender = swap.senderAddress;
         receiver = swap.receiverAddress;
         keyHolder = swap.keyHolderAddress;
         remChainAddress = swap.remchainAddress;
+        state = swapStates[_swapId];
+    }
+
+    /// @notice Get swap full info
+    function getSwapDetails(uint256 _swapId) returns (
+        uint amount,
+        bytes emailEncrypted,
+        bytes32 secretLock,
+        bytes secretKey,
+        uint timelock)
+    {
         amount = swap.amount;
         emailEncrypted = swap.emailEncryptedOptional;
         secretLock = swap.secretLock;
         secretKey = swap.secretKey;
         timelock = swap.timelock;
-        state = swapStates[_swapId];
     }
 
     /*
