@@ -8,8 +8,8 @@ contract RemmeTokenMock is ERC20Interface {
 	uint _totalSupply = 10000000000000;
 	uint8 decimals = 4;
 
-	function RemmeTokenMock(){
-		//constructor
+	function RemmeTokenMock() {
+		transfer(msg.sender, _totalSupply);
 	}
 
 	event Transfer(address indexed from, address indexed to, uint256 value);
