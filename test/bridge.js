@@ -1,7 +1,6 @@
-import "zeppelin-solidity/test/helpers/assertRevert.js"
-import assertRevert from "./helpers/assertRevert"
+import assertRevert from './helpers/assertRevert';
 
-const RemmeToken = artifacts.require('RemmeTokenMock')
+const RemmeToken = artifacts.require('RemmeTokenMock');
 const RemmeBridge = artifacts.require('RemmeBridge')
 
 contract ('RemmeBridge', accounts => {
