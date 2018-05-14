@@ -1,10 +1,10 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.23;
 
 import 'openzeppelin-solidity/contracts/math/SafeMath.sol';
 import '../contracts/ERC20Interface.sol';
 
 /* @title RemmeBridge
-*  Contract, that allows to perform p2p exchange Ethereum REM tokens to native REM tokens
+*  Contract, that allows to perform p2p exchange ERC20 REM tokens to native REM tokens
 */
 contract RemmeBridge {
 
@@ -43,7 +43,6 @@ contract RemmeBridge {
 	address coldStorage;
 	mapping(bytes32 => AtomicSwap) public swaps;
     mapping (bytes32 => State) public swapStates; // mapping with states of each swap
-	mapping (address => uint256) public deposits; // user deposits
     uint256 public providerFee; //fee for provider work
 
     //EVENTS
@@ -75,8 +74,8 @@ contract RemmeBridge {
     }
 
     //CONSTRUCTOR
-    function RemmeBridge(ERC20Interface _token, address _atomicSwapProvider, address _coldStorage, uint256 _providerFee) {
-        REMToken = _token;
+    constructor(address _tokenAddress, address _atomicSwapProvider, address _coldStorage, uint256 _providerFee) {
+        REMToken = ERC20Interface(_tokenAddress);
         atomicSwapProvider = _atomicSwapProvider;
         coldStorage = _coldStorage;
         providerFee = _providerFee;
@@ -139,12 +138,14 @@ contract RemmeBridge {
         //Bob always set as keyHolder
 	    uint256 lock;
 	    address keyHolder;
+	    uint256 amountToSwap = _amount;
         if (_secretLock == bytes32(0)) {
             lock = now + LOCK24;
             keyHolder = _receiverAddress;
             //get fee if used atomicSwapProvider
             if (_receiverAddress == atomicSwapProvider) {
                 require(REMToken.transferFrom(msg.sender, coldStorage, providerFee));
+	            amountToSwap = _amount.sub(providerFee);
             }
         } else {
             lock = now + LOCK48;
@@ -152,7 +153,6 @@ contract RemmeBridge {
         }
 
         //create and save new swap
-	    uint256 amountToSwap = _amount - providerFee;
 	    AtomicSwap memory swap = AtomicSwap({
             swapId: _swapId,
             senderAddress: msg.sender,
@@ -169,7 +169,6 @@ contract RemmeBridge {
 
         //deposit tokens
 		require(REMToken.transferFrom(msg.sender, address(this), amountToSwap));
-        deposits[msg.sender] = amountToSwap;
 
         //set state
         swapStates[swap.swapId] = State.OPENED;
@@ -186,7 +185,6 @@ contract RemmeBridge {
         AtomicSwap storage currentSwap = swaps[_swapId];
 
         //withdraw funds
-        deposits[msg.sender] = deposits[msg.sender].sub(currentSwap.amount);
         REMToken.transfer(msg.sender, currentSwap.amount);
 
         swapStates[_swapId] = State.EXPIRED;
@@ -242,8 +240,6 @@ contract RemmeBridge {
 
 	    AtomicSwap storage currentSwap = swaps[_swapId];
 
-	    // withdraw funds
-	    deposits[currentSwap.senderAddress] = deposits[currentSwap.senderAddress].sub(currentSwap.amount);
         // transfer to receiver address
 	    if (currentSwap.receiverAddress == atomicSwapProvider) {
             REMToken.transfer(coldStorage, currentSwap.amount);
