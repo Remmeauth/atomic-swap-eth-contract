@@ -10,15 +10,16 @@ contract RemmeBridge {
 
     struct AtomicSwap {
         bytes32 swapId;
-        bytes32 secretLock; //hash of key, that used for locking funds
-        bytes32 secretKey; //key used on both chains for unlocking funds
+        bytes32 secretLock;
+        bytes32 secretKey;
         address senderAddress;
         address receiverAddress;
-        address keyHolderAddress; //Bob's address
-        uint256 amount; //amount for swap, which will be locked
-        uint256 timelock; //time from which is allowed swap expiration
-        bytes remchainAddress; //provided remchain address
-        bytes emailAddressEncryptedOptional; //optional argument with encrypted email for swap continiue notification
+        address keyHolderAddress;
+        uint256 amount;
+        uint256 timelock;
+        bytes remchainAddress;
+        bytes emailAddressEncryptedOptional;
+        State state;
     }
 
     enum State {
@@ -29,8 +30,8 @@ contract RemmeBridge {
         EXPIRED
     }
 
-	//LIBRARIES
-	using SafeMath for uint256;
+    //LIBRARIES
+    using SafeMath for uint256;
 
     //CONSTANTS
     uint256 constant LOCK24 = 86400; //seconds in 24h
@@ -41,15 +42,14 @@ contract RemmeBridge {
 	address atomicSwapProvider;
 	address coldStorage;
 	mapping(bytes32 => AtomicSwap) public swaps;
-    mapping (bytes32 => State) public swapStates; // mapping with states of each swap
     uint256 public providerFee; //fee for provider work
 
     //EVENTS
-    event OpenSwap(bytes32 _swapId);
-    event ExpireSwap(bytes32 _swapId);
-	event SetSecretLock(bytes32 _swapId);
-    event ApproveSwap(bytes32 _swapId);
-	event CloseSwap(bytes32 _swapId);
+    event OpenSwap(bytes32 indexed _swapId);
+    event ExpireSwap(bytes32 indexed _swapId);
+	event SetSecretLock(bytes32 indexed _swapId);
+    event ApproveSwap(bytes32 indexed _swapId);
+	event CloseSwap(bytes32 indexed _swapId);
 
     //MODIFIERS
     modifier onlyOverdueSwap(bytes32 _swapId) {
@@ -63,7 +63,7 @@ contract RemmeBridge {
     }
 
     modifier onlyOpenedState(bytes32 _swapId) {
-        require(swapStates[_swapId] == State.OPENED);
+        require(swaps[_swapId].state == State.OPENED);
         _;
     }
 
@@ -94,7 +94,7 @@ contract RemmeBridge {
         receiver = swap.receiverAddress;
         keyHolder = swap.keyHolderAddress;
         remChainAddress = swap.remchainAddress;
-        state = swapStates[_swapId];
+        state = swap.state;
     }
 
     /// @notice Get swap details info
@@ -158,13 +158,13 @@ contract RemmeBridge {
             emailAddressEncryptedOptional: _emailAddressEncryptedOptional,
             secretLock: _secretLock,
             secretKey: "", //will be set only on closing swap
-            timelock: lock
+            timelock: lock,
+            state: State.OPENED
             });
         swaps[swap.swapId] = swap;
 
 	    require(REMToken.transferFrom(msg.sender, address(this), amountToSwap));
 
-        swapStates[swap.swapId] = State.OPENED;
         emit OpenSwap(swap.swapId);
     }
 
@@ -173,12 +173,12 @@ contract RemmeBridge {
     function expireSwap(bytes32 _swapId) onlyOverdueSwap(_swapId) external {
 
         require(msg.sender == swaps[_swapId].senderAddress);
-        require(swapStates[_swapId] == State.OPENED || swapStates[_swapId] == State.APPROVED);
+        require(swaps[_swapId].state == State.OPENED || swaps[_swapId].state == State.APPROVED);
 
         AtomicSwap storage currentSwap = swaps[_swapId];
         REMToken.transfer(msg.sender, currentSwap.amount);
 
-        swapStates[_swapId] = State.EXPIRED;
+        currentSwap.state = State.EXPIRED;
         emit ExpireSwap(_swapId);
     }
 
@@ -206,7 +206,7 @@ contract RemmeBridge {
         require(swaps[_swapId].secretLock != bytes32(0));
         require(msg.sender == swaps[_swapId].senderAddress);
 
-        swapStates[_swapId] = State.APPROVED;
+        swaps[_swapId].state = State.APPROVED;
         emit ApproveSwap(_swapId);
     }
 
@@ -218,9 +218,9 @@ contract RemmeBridge {
         require(msg.sender == swaps[_swapId].receiverAddress);
 
 	    if (swaps[_swapId].senderAddress == swaps[_swapId].keyHolderAddress) {
-		    require(swapStates[_swapId] == State.OPENED);
+		    require(swaps[_swapId].state == State.OPENED);
 	    } else {
-		    require(swapStates[_swapId] == State.APPROVED);
+		    require(swaps[_swapId].state == State.APPROVED);
         }
         require(keccak256(_secretKey) == swaps[_swapId].secretLock);
 
@@ -230,7 +230,7 @@ contract RemmeBridge {
 	    } else {
             REMToken.transfer(currentSwap.receiverAddress, currentSwap.amount);
 	    }
-	    swapStates[_swapId] = State.CLOSED;
+	    currentSwap.state = State.CLOSED;
 	    emit CloseSwap(_swapId);
     }
 

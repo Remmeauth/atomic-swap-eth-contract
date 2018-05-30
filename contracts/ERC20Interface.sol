@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.23;
 
 contract ERC20Interface {
 	event Transfer(address indexed from, address indexed to, uint256 value);
@@ -11,7 +11,5 @@ contract ERC20Interface {
 	function approve(address _spender, uint256 _value) returns(bool success);
 	function allowance(address _owner, address _spender) constant returns(uint256 remaining);
 
-	// function symbol() constant returns(string);
 	function decimals() constant returns(uint8);
-	// function name() constant returns(string);
 }

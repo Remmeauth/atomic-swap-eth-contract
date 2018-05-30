@@ -1,7 +1,7 @@
 import assertRevert from './helpers/assertRevert';
 import increaseTime from "./helpers/increaseTime"
-var Web3latest = require('web3');
-var web3latest = new Web3latest();
+const Web3latest = require('web3');
+const web3latest = new Web3latest();
 const eventProvider = new web3latest.providers.WebsocketProvider('ws://localhost:7545')
 web3latest.setProvider(eventProvider)
 
@@ -130,6 +130,7 @@ contract ('RemmeBridge', accounts => {
 
         it('should deposit proper token amount to swap & fee to cold storage if provider used', async() => {
             swapId = web3.toHex(web3latest.utils.soliditySha3(7)) //make sure swapId not match with existing
+            console.log(swapId);
             amount = 100000
             let coldStorageInitialBalance = await remmeToken.balanceOf(coldStorage)
             console.log(coldStorageInitialBalance.toNumber())
@@ -143,6 +144,16 @@ contract ('RemmeBridge', accounts => {
             assert.equal(coldStorageEndBalance.toNumber(), coldStorageInitialBalance.toNumber() + providerFee,
                 "should transfer fee to cold storage")
             assert.equal(swapAmount, amount - providerFee, "should set amount without fee to swap")
+        })
+
+        it('should not allow to open swap with existing swap with the same id', async() => {
+            swapId = web3.toHex(web3latest.utils.soliditySha3(701)) //make sure swapId not match with existing
+            amount = 10000
+
+            await remmeToken.approve(remmeBridge.address, amount, {from: alice})
+            await remmeBridge.openSwap(swapId, swapProvider, emptyLock, amount, remchainAddress, "email", {from: alice})
+
+            assertRevert(remmeBridge.openSwap(swapId, swapProvider, emptyLock, amount, remchainAddress, "email", {from: alice}))
         })
     })
 
@@ -242,7 +253,6 @@ contract ('RemmeBridge', accounts => {
             await remmeBridge.closeSwap(swapId, secretKey, {from:swapProvider})
             let [,,,,state3] = await remmeBridge.getSwapInfo.call(swapId)
             console.log("state: " + state3)
-            console.log((await remmeBridge.swapStates.call(swapId)).toNumber())
             assert.equal(state3.toNumber(), 3, "state should be closed")
         })
 
