@@ -25,6 +25,7 @@ contract RemmeBridge {
     enum State {
         EMPTY,
         OPENED,
+        SECRETED,
         APPROVED,
         CLOSED,
         EXPIRED
@@ -45,11 +46,11 @@ contract RemmeBridge {
     uint256 public providerFee; //fee for provider work
 
     //EVENTS
-    event OpenSwap(bytes32 indexed _swapId);
-    event ExpireSwap(bytes32 indexed _swapId);
-	event SetSecretLock(bytes32 indexed _swapId);
-    event ApproveSwap(bytes32 indexed _swapId);
-	event CloseSwap(bytes32 indexed _swapId);
+    event OpenSwap(bytes32 indexed swapId);
+    event ExpireSwap(bytes32 indexed swapId);
+	event SetSecretLock(bytes32 indexed swapId);
+    event ApproveSwap(bytes32 indexed swapId);
+	event CloseSwap(bytes32 indexed swapId);
 
     //MODIFIERS
     modifier onlyOverdueSwap(bytes32 _swapId) {
@@ -64,6 +65,11 @@ contract RemmeBridge {
 
     modifier onlyOpenedState(bytes32 _swapId) {
         require(swaps[_swapId].state == State.OPENED);
+        _;
+    }
+
+    modifier onlySecretedState(bytes32 _swapId) {
+        require(swaps[_swapId].state == State.SECRETED);
         _;
     }
 
@@ -196,12 +202,13 @@ contract RemmeBridge {
         require(_secretLock != bytes32(0));
 
         swaps[_swapId].secretLock = _secretLock;
+        swaps[_swapId].state = State.SECRETED;
         emit SetSecretLock(_swapId);
     }
 
     /* @notice should be called only by Alice after setting lock
     */
-    function approveSwap(bytes32 _swapId) onlyNotOverdueSwap(_swapId) onlyOpenedState(_swapId) external payable {
+    function approveSwap(bytes32 _swapId) onlyNotOverdueSwap(_swapId) onlySecretedState(_swapId) external payable {
 
         require(swaps[_swapId].secretLock != bytes32(0));
         require(msg.sender == swaps[_swapId].senderAddress);
