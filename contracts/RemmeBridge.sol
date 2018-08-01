@@ -179,7 +179,7 @@ contract RemmeBridge {
     function expireSwap(bytes32 _swapId) onlyOverdueSwap(_swapId) external {
 
         require(msg.sender == swaps[_swapId].senderAddress);
-        require(swaps[_swapId].state == State.OPENED || swaps[_swapId].state == State.APPROVED);
+        require(swaps[_swapId].state == State.OPENED || swaps[_swapId].state == State.SECRETED || swaps[_swapId].state == State.APPROVED);
 
         AtomicSwap storage currentSwap = swaps[_swapId];
         REMToken.transfer(msg.sender, currentSwap.amount);
